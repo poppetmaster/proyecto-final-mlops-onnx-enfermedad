@@ -78,8 +78,6 @@ artefactos versionados en **Google Cloud Storage**.
 
 ## 2. Arquitectura
 
-## Arquitectura de la solución
-
 La siguiente arquitectura resume el flujo completo del proyecto MLOps, desde el control de código en GitHub hasta el despliegue en Cloud Run y el registro de predicciones en Google Cloud Storage.
 
 ![Arquitectura MLOps del proyecto final](docs/arquitectura/arquitectura_mlops.png)

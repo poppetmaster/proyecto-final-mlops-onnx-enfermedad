@@ -11,7 +11,7 @@ env:
   # GCP comunes (override por rama abajo en build-promote)
   GCP_REGION: us-central1
   ARTIFACT_REGISTRY_REPO: mlops-proyecto-final
-  IMAGE_NAME: mlops-proyecto-final
+  IMAGE_NAME: mlops-enfermedad
   METRIC_THRESHOLD: "0.80"
   METRIC_NAME: "f1_weighted"
 

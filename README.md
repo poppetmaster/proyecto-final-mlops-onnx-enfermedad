@@ -78,32 +78,47 @@ artefactos versionados en **Google Cloud Storage**.
 
 ## 2. Arquitectura
 
-```
-┌──────────────────┐       ┌────────────────────┐
-│   GitHub Repo    │ push  │  GitHub Actions    │
-│  (dev / prod)    │──────▶│   CI/CD Workflow   │
-└──────────────────┘       └─────────┬──────────┘
-                                     │
-                  ┌──────────────────┼──────────────────┐
-                  │                  │                  │
-                  ▼                  ▼                  ▼
-        ┌────────────────┐  ┌────────────────┐  ┌────────────────┐
-        │  Job: TEST     │  │ Job: BUILD     │  │ Job: DEPLOY    │
-        │  - pytest      │  │ - docker build │  │ - gcloud run   │
-        │  - validate    │  │ - push image   │  │   deploy       │
-        └───────┬────────┘  └───────┬────────┘  └───────┬────────┘
-                │                   │                   │
-                ▼                   ▼                   ▼
-        ┌────────────────┐  ┌──────────────────────┐  ┌────────────────┐
-        │ GCS: modelo    │  │  Artifact Registry   │  │ Cloud Run      │
-        │ GCS: testdata  │  │  mlops-proyecto-final│  │ DEV / PROD     │
-        └────────────────┘  └──────────────────────┘  └───────┬────────┘
-                                                              │
-                                                    ┌─────────▼────────┐
-                                                    │  GCS: logs TXT   │
-                                                    │ predicciones_*.txt│
-                                                    └──────────────────┘
-```
+## Arquitectura de la solución
+
+La siguiente arquitectura resume el flujo completo del proyecto MLOps, desde el control de código en GitHub hasta el despliegue en Cloud Run y el registro de predicciones en Google Cloud Storage.
+
+![Arquitectura MLOps del proyecto final](docs/arquitectura/arquitectura_mlops.png)
+### Descripción general del flujo
+
+1. **Control de código**
+   - El desarrollo se gestiona en un repositorio GitHub con dos ramas principales:
+     - `dev`
+     - `prod`
+
+2. **CI/CD con GitHub Actions**
+   - Cada `push` a `dev` o `prod` dispara el pipeline.
+   - El pipeline ejecuta dos etapas principales:
+     - **Test**: descarga el modelo ONNX y los datos de prueba desde GCS, ejecuta `pytest` y valida la métrica del modelo.
+     - **Build & Deploy**: descarga el modelo, construye la imagen Docker, la publica en Artifact Registry y despliega el servicio en Cloud Run.
+
+3. **Almacenamiento de artefactos y datos**
+   - El modelo `modelo_enfermedad.onnx` se almacena en un bucket de Google Cloud Storage.
+   - El archivo `test_data.csv` también se almacena en GCS.
+   - Los logs de predicción se almacenan como:
+     - `predicciones_dev.txt`
+     - `predicciones_prod.txt`
+
+4. **Registro de contenedores**
+   - Las imágenes Docker se almacenan en **Artifact Registry** dentro del repositorio:
+     - `mlops-proyecto-final`
+
+5. **Despliegue y servicio**
+   - Se despliegan dos servicios en **Cloud Run**:
+     - `mlops-enfermedad-dev`
+     - `mlops-enfermedad-prod`
+   - La API está implementada con **FastAPI + ONNX Runtime**.
+   - Endpoints principales:
+     - `GET /health`
+     - `POST /predict`
+
+6. **Consumo y retroalimentación**
+   - El médico o usuario consume los endpoints del ambiente correspondiente.
+   - Cada predicción realizada se registra en archivos TXT en GCS, permitiendo trazabilidad y evidencia del funcionamiento.
 
 ---
 

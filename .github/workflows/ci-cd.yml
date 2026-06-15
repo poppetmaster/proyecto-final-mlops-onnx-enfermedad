@@ -10,8 +10,8 @@ env:
   PYTHON_VERSION: "3.11"
   # GCP comunes (override por rama abajo en build-promote)
   GCP_REGION: us-central1
-  ARTIFACT_REGISTRY_REPO: mlops-enfermedad
-  IMAGE_NAME: mlops-enfermedad
+  ARTIFACT_REGISTRY_REPO: mlops-proyecto-final
+  IMAGE_NAME: mlops-proyecto-final
   METRIC_THRESHOLD: "0.80"
   METRIC_NAME: "f1_weighted"
 
@@ -43,13 +43,12 @@ jobs:
         run: |
           if [[ "${{ github.ref }}" == "refs/heads/prod" ]]; then
             echo "environment=prod" >> $GITHUB_OUTPUT
-            echo "gcs_model_bucket=${{ secrets.GCS_MODEL_BUCKET_PROD }}" >> $GITHUB_OUTPUT
-            echo "gcs_data_bucket=${{ secrets.GCS_DATA_BUCKET_PROD }}" >> $GITHUB_OUTPUT
           else
             echo "environment=dev" >> $GITHUB_OUTPUT
-            echo "gcs_model_bucket=${{ secrets.GCS_MODEL_BUCKET_DEV }}" >> $GITHUB_OUTPUT
-            echo "gcs_data_bucket=${{ secrets.GCS_DATA_BUCKET_DEV }}" >> $GITHUB_OUTPUT
           fi
+          echo "gcs_model_bucket=${{ secrets.GCS_MODEL_BUCKET }}" >> $GITHUB_OUTPUT
+          echo "gcs_data_bucket=${{ secrets.GCS_DATA_BUCKET }}" >> $GITHUB_OUTPUT
+          
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
@@ -113,19 +112,17 @@ jobs:
             echo "environment=prod" >> $GITHUB_OUTPUT
             echo "image_tag=prod" >> $GITHUB_OUTPUT
             echo "service_name=mlops-enfermedad-prod" >> $GITHUB_OUTPUT
-            echo "gcs_model_bucket=${{ secrets.GCS_MODEL_BUCKET_PROD }}" >> $GITHUB_OUTPUT
-            echo "gcs_logs_bucket=${{ secrets.GCS_LOGS_BUCKET_PROD }}" >> $GITHUB_OUTPUT
             echo "predictions_file=predicciones_prod.txt" >> $GITHUB_OUTPUT
             echo "model_version=v1.0.0" >> $GITHUB_OUTPUT
           else
             echo "environment=dev" >> $GITHUB_OUTPUT
             echo "image_tag=dev" >> $GITHUB_OUTPUT
             echo "service_name=mlops-enfermedad-dev" >> $GITHUB_OUTPUT
-            echo "gcs_model_bucket=${{ secrets.GCS_MODEL_BUCKET_DEV }}" >> $GITHUB_OUTPUT
-            echo "gcs_logs_bucket=${{ secrets.GCS_LOGS_BUCKET_DEV }}" >> $GITHUB_OUTPUT
             echo "predictions_file=predicciones_dev.txt" >> $GITHUB_OUTPUT
             echo "model_version=v1.0.0-dev" >> $GITHUB_OUTPUT
           fi
+          echo "gcs_model_bucket=${{ secrets.GCS_MODEL_BUCKET }}" >> $GITHUB_OUTPUT
+          echo "gcs_logs_bucket=${{ secrets.GCS_LOGS_BUCKET }}" >> $GITHUB_OUTPUT
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2

@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+pydantic>=2.0
+onnxruntime
+numpy
+pandas
+scikit-learn
+skl2onnx
+google-cloud-storage
+pytest
+httpx

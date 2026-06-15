@@ -1,0 +1,11 @@
+# Artefactos y credenciales sensibles
+*.onnx
+artifacts/
+models/
+data/
+*.csv
+.env
+*.json
+gcp-sa-key*.json
+__pycache__/
+.venv/

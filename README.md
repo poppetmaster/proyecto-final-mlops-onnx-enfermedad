@@ -27,7 +27,7 @@
 | Modelo ONNX | Almacenado en GCS, no en GitHub |
 | Test data | Almacenado en GCS, no en GitHub |
 | Artifact Registry | `mlops-proyecto-final` |
-| Imagen Docker | `mlops-enfermedad` |
+| Imagen Docker | `mlops-enfermedad` — incluye formulario web |
 | Cloud Run DEV | `mlops-enfermedad-dev` |
 | Cloud Run PROD | `mlops-enfermedad-prod` |
 | Logs DEV | `predicciones_dev.txt` en GCS |
@@ -333,6 +333,7 @@ ejecución del workflow.
 | GET | `/health` | Health check (usado por Cloud Run) |
 | GET | `/model-info` | Versión, features y clases del modelo |
 | GET | `/docs` | Documentación interactiva Swagger UI |
+| POST | `/predecir` | Predicción vía formulario web (HTML) |
 | POST | `/predict` | Predicción de estado de enfermedad |
 
 ---

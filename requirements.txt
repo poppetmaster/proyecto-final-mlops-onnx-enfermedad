@@ -1,6 +1,8 @@
 fastapi
 uvicorn[standard]
 pydantic>=2.0
+jinja2
+python-multipart
 onnxruntime
 numpy
 pandas

@@ -1,0 +1,213 @@
+name: CI/CD - MLOps Enfermedad
+
+on:
+  push:
+    branches:
+      - dev
+      - prod
+
+env:
+  PYTHON_VERSION: "3.11"
+  # GCP comunes (override por rama abajo en build-promote)
+  GCP_REGION: us-central1
+  ARTIFACT_REGISTRY_REPO: mlops-enfermedad
+  IMAGE_NAME: mlops-enfermedad
+  METRIC_THRESHOLD: "0.80"
+  METRIC_NAME: "f1_weighted"
+
+jobs:
+  # ============================================================
+  # JOB 1: TEST
+  # ============================================================
+  test:
+    name: 🧪 Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Determinar entorno según rama
+        id: env
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/prod" ]]; then
+            echo "environment=prod" >> $GITHUB_OUTPUT
+            echo "gcs_model_bucket=${{ secrets.GCS_MODEL_BUCKET_PROD }}" >> $GITHUB_OUTPUT
+            echo "gcs_data_bucket=${{ secrets.GCS_DATA_BUCKET_PROD }}" >> $GITHUB_OUTPUT
+          else
+            echo "environment=dev" >> $GITHUB_OUTPUT
+            echo "gcs_model_bucket=${{ secrets.GCS_MODEL_BUCKET_DEV }}" >> $GITHUB_OUTPUT
+            echo "gcs_data_bucket=${{ secrets.GCS_DATA_BUCKET_DEV }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+
+      - name: Setup gcloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Descargar modelo desde GCS
+        env:
+          GCS_MODEL_BUCKET: ${{ steps.env.outputs.gcs_model_bucket }}
+          GCS_MODEL_BLOB: modelo_enfermedad.onnx
+          MODEL_PATH: models/modelo_enfermedad.onnx
+        run: |
+          mkdir -p models
+          python scripts/download_model.py
+
+      - name: Descargar test data desde GCS
+        env:
+          GCS_DATA_BUCKET: ${{ steps.env.outputs.gcs_data_bucket }}
+          GCS_TEST_DATA_BLOB: test_data.csv
+          TEST_DATA_PATH: data/test_data.csv
+        run: |
+          mkdir -p data
+          python scripts/download_test_data.py
+
+      - name: Ejecutar pytest
+        env:
+          MODEL_PATH: models/modelo_enfermedad.onnx
+          TEST_DATA_PATH: data/test_data.csv
+          ENVIRONMENT: ${{ steps.env.outputs.environment }}
+          METRIC_THRESHOLD: ${{ env.METRIC_THRESHOLD }}
+        run: pytest tests/ -v --tb=short
+
+      - name: Validar métrica del modelo
+        env:
+          MODEL_PATH: models/modelo_enfermedad.onnx
+          TEST_DATA_PATH: data/test_data.csv
+          METRIC_THRESHOLD: ${{ env.METRIC_THRESHOLD }}
+          METRIC_NAME: ${{ env.METRIC_NAME }}
+        run: python scripts/validate_model.py
+
+
+  # ============================================================
+  # JOB 2: BUILD & PROMOTE
+  # ============================================================
+  build-promote:
+    name: 🚀 Build & Deploy
+    needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Determinar entorno y parámetros según rama
+        id: env
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/prod" ]]; then
+            echo "environment=prod" >> $GITHUB_OUTPUT
+            echo "image_tag=prod" >> $GITHUB_OUTPUT
+            echo "service_name=mlops-enfermedad-prod" >> $GITHUB_OUTPUT
+            echo "gcs_model_bucket=${{ secrets.GCS_MODEL_BUCKET_PROD }}" >> $GITHUB_OUTPUT
+            echo "gcs_logs_bucket=${{ secrets.GCS_LOGS_BUCKET_PROD }}" >> $GITHUB_OUTPUT
+            echo "predictions_file=predicciones_prod.txt" >> $GITHUB_OUTPUT
+            echo "model_version=v1.0.0" >> $GITHUB_OUTPUT
+          else
+            echo "environment=dev" >> $GITHUB_OUTPUT
+            echo "image_tag=dev" >> $GITHUB_OUTPUT
+            echo "service_name=mlops-enfermedad-dev" >> $GITHUB_OUTPUT
+            echo "gcs_model_bucket=${{ secrets.GCS_MODEL_BUCKET_DEV }}" >> $GITHUB_OUTPUT
+            echo "gcs_logs_bucket=${{ secrets.GCS_LOGS_BUCKET_DEV }}" >> $GITHUB_OUTPUT
+            echo "predictions_file=predicciones_dev.txt" >> $GITHUB_OUTPUT
+            echo "model_version=v1.0.0-dev" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+
+      - name: Setup gcloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configurar Docker para Artifact Registry
+        run: |
+          gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Setup Python (para descarga del modelo)
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Instalar google-cloud-storage
+        run: pip install google-cloud-storage
+
+      - name: Descargar modelo ONNX desde GCS (para el build)
+        env:
+          GCS_MODEL_BUCKET: ${{ steps.env.outputs.gcs_model_bucket }}
+          GCS_MODEL_BLOB: modelo_enfermedad.onnx
+          MODEL_PATH: models/modelo_enfermedad.onnx
+        run: |
+          mkdir -p models
+          python scripts/download_model.py
+          ls -lh models/
+
+      - name: Definir URL completa de la imagen
+        id: image
+        run: |
+          PROJECT_ID="${{ secrets.GCP_PROJECT_ID }}"
+          IMAGE_URL="${{ env.GCP_REGION }}-docker.pkg.dev/${PROJECT_ID}/${{ env.ARTIFACT_REGISTRY_REPO }}/${{ env.IMAGE_NAME }}"
+          echo "url=${IMAGE_URL}" >> $GITHUB_OUTPUT
+          echo "Imagen: ${IMAGE_URL}:${{ steps.env.outputs.image_tag }}"
+
+      - name: Construir imagen Docker
+        run: |
+          docker build \
+            -t ${{ steps.image.outputs.url }}:${{ steps.env.outputs.image_tag }} \
+            -t ${{ steps.image.outputs.url }}:${{ github.sha }} \
+            .
+
+      - name: Publicar imagen en Artifact Registry
+        run: |
+          docker push ${{ steps.image.outputs.url }}:${{ steps.env.outputs.image_tag }}
+          docker push ${{ steps.image.outputs.url }}:${{ github.sha }}
+
+      - name: Desplegar a Cloud Run
+        run: |
+          gcloud run deploy ${{ steps.env.outputs.service_name }} \
+            --image=${{ steps.image.outputs.url }}:${{ steps.env.outputs.image_tag }} \
+            --region=${{ env.GCP_REGION }} \
+            --platform=managed \
+            --allow-unauthenticated \
+            --port=8080 \
+            --memory=1Gi \
+            --cpu=1 \
+            --timeout=60 \
+            --concurrency=80 \
+            --set-env-vars="ENVIRONMENT=${{ steps.env.outputs.environment }}" \
+            --set-env-vars="MODEL_VERSION=${{ steps.env.outputs.model_version }}" \
+            --set-env-vars="MODEL_PATH=/app/models/modelo_enfermedad.onnx" \
+            --set-env-vars="GCS_LOGS_BUCKET=${{ steps.env.outputs.gcs_logs_bucket }}" \
+            --set-env-vars="PREDICTIONS_FILE=${{ steps.env.outputs.predictions_file }}"
+
+      - name: Obtener URL del servicio desplegado
+        run: |
+          URL=$(gcloud run services describe ${{ steps.env.outputs.service_name }} \
+            --region=${{ env.GCP_REGION }} --format='value(status.url)')
+          echo "🚀 Servicio desplegado en: $URL"
+          echo "## ✅ Despliegue exitoso" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Entorno:** \`${{ steps.env.outputs.environment }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Servicio:** \`${{ steps.env.outputs.service_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **URL:** $URL" >> $GITHUB_STEP_SUMMARY
+          echo "- **Imagen:** \`${{ steps.image.outputs.url }}:${{ steps.env.outputs.image_tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Probar:" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo "curl $URL/health" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY

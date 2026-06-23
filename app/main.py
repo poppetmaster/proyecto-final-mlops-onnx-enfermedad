@@ -202,7 +202,7 @@ PAGINA_HTML = """
 <body>
 
 <div class="header">
-  <h1>Predicción de Estado de Enfermedad</h1>
+  <h1>Predicción de Estado de Enfermedad modificado</h1>
   <p>Universidad Icesi · Pipeline de MLOps · Proyecto Final</p>
   <span class="env-tag">{{ environment }} · {{ model_version }}</span>
 </div>
